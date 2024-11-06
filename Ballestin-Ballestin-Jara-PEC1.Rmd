@@ -1,0 +1,142 @@
+---
+title: "Análisis de datos ómicos - PEC1"
+author: "Jara Ballestin"
+date: "2024-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Descarga de los datos
+El primer paso para comenzar la actividad es la descarga de un dataset de metabolómica del repositorio de github proporcionado (https://github.com/nutrimetabolomics/metaboData). Para ello,hacemos click en el botón verde "Code" y copiamos la URL. Para clonar el repositorio localmente, abrimos el símbolo del sistema y una vez seleccionada la carpeta de destino, escribimos: "git clone https://github.com/nutrimetabolomics/metaboData.git". Yo he elegido el primer dataset en esta carpeta: 2018-MetabotypingPaper. Los datos consisten de tres archivos: 
+- DataInfo_S013.csv: Metadata. Información de cada columna en el archivo "DataValues_S013.csv".
+- DataValues_S013.csv: Valores clínicos y metabolómicos de 39 pacientes en 5 momentos diferentes.
+- AAInformation_S006.htm*: Información adicional de los metabolitos en el archivo "DataValues_S013.csv".
+*Este archivo debería ser un .csv pero en este repositorio está como .htm y no puedo abrirlo. Por lo tanto, he accedido al repositorio de github original (https://github.com/nutrimetabolomics/Metabotyping2018) y lo he clonado para tener el archivo original en mi ordenador. Al abrir el archivo, he visto que los nombres de los metabolitos no coinciden con los del archivo "DataValues_S013.csv". He buscado el paper original "Metabotypes of response to bariatric surgery independent of the magnitude of weight loss", y este archivo corresponde con la tabla suplementaria 1 (S1 Table): este archivo contiene información sobre varios metabolitos, incluyendo algunos que fueron excluidos del análisis. Además, algunos metabolitos están en este archivo pero no en "DataValues_S013.csv", o viceversa.
+
+## Crear un contenedor SummarizedExperiment
+
+Cargamos los paquetes necesarios:
+```{r}
+if (!requireNamespace("SummarizedExperiment", quietly = TRUE)) {
+  install.packages("BiocManager")
+  BiocManager::install("SummarizedExperiment")
+}
+library(SummarizedExperiment)
+```
+
+Cargamos los archivos de datos:
+```{r}
+data_values <- read.csv("data/DataValues_S013.csv", row.names = 1)
+data_info <- read.csv("data/DataInfo_S013.csv", stringsAsFactors = FALSE)
+aa_info <- read.csv("data/AAInformation_S006.csv", sep = ';', row.names = 1)
+
+#Para poder guardar la información de aa_info en nuestro SummarizedExperiment, generamos un dataframe con la información de aa_info que corresponda con los metabolitos de data_values
+# 1. Crear un dataframe vacío aa_info_new con una columna extra "name.DataValues" y las columnas de aa_info
+aa_info_new <- data.frame(matrix(ncol = ncol(aa_info) + 1, nrow = 0))
+# 2. Iterar por cada nombre de las columnas en data_values y añadir a aa_info_new la fila correspondiente de aa_info
+for (col_name in colnames(data_values)) {
+  name_values <- gsub("[^[:alnum:]]", "", substr(col_name, 1, nchar(col_name) - 2)) #Seleccionar sólo números y letras y excluir los dos últimos caracteres (referente al tiempo)
+  # 3. Buscar el nombre extraído en la columna "Metabolite.abbreviation" de aa_info y añadir la fila a aa_info_new
+  matched<- FALSE
+  for (j in 1:nrow(aa_info)) {
+    name_aa <- gsub("[^[:alnum:]]", "", aa_info$Metabolite.abbreviation[j]) #Seleccionar sólo números y letras
+    if (name_values == name_aa) {
+      aa_info_new <- rbind(aa_info_new, c(col_name, as.character(unname(aa_info[1, ]))))
+      matched <- TRUE
+      break
+    }
+  }
+  if (!matched) {
+    aa_info_new <- rbind(aa_info_new, c(col_name, rep(NA, ncol(aa_info))))
+  }
+}
+colnames(aa_info_new) <- c("name.DataValues", colnames(aa_info))
+print(aa_info_new)
+
+#Comprobamos dimensiones:
+ncol(data_values)==nrow(data_info)
+ncol(data_values)==nrow(aa_info_new)
+#Comprobamos que los nombres coinciden
+all(colnames(data_values) == data_info[, 1])
+all(colnames(data_values) == aa_info_new[, 1])
+
+#Unimos ambas dataframes _info:
+data_info_new <- cbind(data_info, aa_info_new[,-1])
+head(data_info_new)
+```
+
+Creamos el objeto SummarizedExperiment
+```{r}
+se <- SummarizedExperiment(
+    assays = list(counts = data_values),
+    colData = data_info_new
+)
+#Observamos un resumen del objeto SummarizedExperiment:
+se
+```
+
+## Exploración del dataset
+
+Este conjunto de datos recopila información clínica y metabolómica de 39 pacientes en cinco momentos diferentes, antes y después de una cirugía bariátrica. Incluye datos demográficos y de salud, así como niveles de metabolitos específicos, con el objetivo de analizar cómo responde el metabolismo a la cirugía. A través de estos datos, el estudio original de donde se han obtenido busca identificar patrones metabólicos que expliquen las diferencias en la respuesta de los pacientes más allá de la pérdida de peso.
+
+Comenzamos observando el número de variables y muestras:
+```{r}
+#Número de muestras
+num_variables <- ncol(assay(se))
+cat("Número de variables (variables demográficas y metabolitos):", num_variables, "\n")
+
+#Número de variables
+num_muestras <- nrow(assay(se))
+cat("Número de muestras:", num_muestras, "\n")
+```
+Comprobamos si faltan valores (NA)
+```{r}
+na <- colSums(is.na(assay(se)))
+cat("Datos faltantes por variable:\n")
+print(na[na>0])
+#Observamos que faltan bastantes valores en el dataset.
+```
+Descripción estadística de las variables demográficas
+```{r}
+cat("Resumen cirugía:")
+print(table(data_values$SURGERY))
+cat("Resumen edad:\n")
+print(summary(data_values$AGE))
+cat("Resumen sexo:")
+print(table(data_values$GENDER))
+```
+
+Visualizamos la distribución de los metabolitos a través de un gráfico simple:
+```{r}
+# Seleccionar solo los datos de metabolitos
+metabolitos <- assay(se)[, !(colnames(assay(se)) %in% c("SUBJECTS", "SURGERY", "AGE", "GENDER", "Group"))]
+
+# Crear un boxplot para todos los metabolitos
+boxplot(metabolitos, main = "Distribución de metabolitos", 
+        ylab = "Intensidad", las = 2, cex.axis = 0.5)
+```
+
+```{r}
+#Calculamos la matriz de correlación entre las variables
+correlation_matrix <- cor(metabolitos, use = "pairwise.complete.obs")
+
+#Visualizamos la matriz de correlación
+library(ggcorrplot)
+ggcorrplot(correlation_matrix, 
+           type = "lower", 
+           title = "Matriz de Correlación") +
+  theme(axis.text.x = element_text(size = 5),
+        axis.text.y = element_text(size = 5))
+```
+En este caso, visualizar la matriz de correlación así no nos aporta nada, ya que es una gran cantidad de datos.
+
+Ya que el numero de metabolitos analizados es muy grande, sería útil hacer un PCA para reducir la dimensionalidad y entender mejor los datos. También se podrían ver patrones o tendencias en los datos, o agrupamientos entre muestras. Así, podríamos identificar metabolitos relevantes, así como outliers.
+Yo he tenido muchos problemas con esto, especialmente con los valores NA. Hay demasiados como para eliminar esos datos, por lo que sería conveniente imputarlos, pero me da errores cuando intento hacerlo de varias maneras diferentes.
+
+## Reposición de los datos en github
+
+
+

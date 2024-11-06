@@ -1,0 +1,6 @@
+o el informe, 
+X el objeto contenedor con los datos y los metadatos en formato binario 
+(.Rda), 
+o el código R para la exploración de los datos 
+X los datos en formato texto y 
+X los metadatos acerca del dataset en un archivo markdown. 
