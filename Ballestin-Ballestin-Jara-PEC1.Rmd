@@ -10,10 +10,14 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
 ## Descarga de los datos
-El primer paso para comenzar la actividad es la descarga de un dataset de metabolómica del repositorio de github proporcionado (https://github.com/nutrimetabolomics/metaboData). Para ello,hacemos click en el botón verde "Code" y copiamos la URL. Para clonar el repositorio localmente, abrimos el símbolo del sistema y una vez seleccionada la carpeta de destino, escribimos: "git clone https://github.com/nutrimetabolomics/metaboData.git". Yo he elegido el primer dataset en esta carpeta: 2018-MetabotypingPaper. Los datos consisten de tres archivos: 
+El primer paso para comenzar la actividad es la descarga de un dataset de metabolómica del repositorio de github proporcionado (https://github.com/nutrimetabolomics/metaboData). Para ello, hacemos click en el botón verde "Code" y copiamos la URL. Para clonar el repositorio localmente, abrimos el símbolo del sistema y una vez seleccionada la carpeta de destino, escribimos: "git clone https://github.com/nutrimetabolomics/metaboData.git". Yo he elegido el primer dataset en esta carpeta: 2018-MetabotypingPaper. Los datos consisten de tres archivos: 
+
 - DataInfo_S013.csv: Metadata. Información de cada columna en el archivo "DataValues_S013.csv".
+
 - DataValues_S013.csv: Valores clínicos y metabolómicos de 39 pacientes en 5 momentos diferentes.
+
 - AAInformation_S006.htm*: Información adicional de los metabolitos en el archivo "DataValues_S013.csv".
+
 *Este archivo debería ser un .csv pero en este repositorio está como .htm y no puedo abrirlo. Por lo tanto, he accedido al repositorio de github original (https://github.com/nutrimetabolomics/Metabotyping2018) y lo he clonado para tener el archivo original en mi ordenador. Al abrir el archivo, he visto que los nombres de los metabolitos no coinciden con los del archivo "DataValues_S013.csv". He buscado el paper original "Metabotypes of response to bariatric surgery independent of the magnitude of weight loss", y este archivo corresponde con la tabla suplementaria 1 (S1 Table): este archivo contiene información sobre varios metabolitos, incluyendo algunos que fueron excluidos del análisis. Además, algunos metabolitos están en este archivo pero no en "DataValues_S013.csv", o viceversa.
 
 ## Crear un contenedor SummarizedExperiment
@@ -32,9 +36,11 @@ Cargamos los archivos de datos:
 data_values <- read.csv("data/DataValues_S013.csv", row.names = 1)
 data_info <- read.csv("data/DataInfo_S013.csv", stringsAsFactors = FALSE)
 aa_info <- read.csv("data/AAInformation_S006.csv", sep = ';', row.names = 1)
+```
 
-#Para poder guardar la información de aa_info en nuestro SummarizedExperiment, generamos un dataframe con la información de aa_info que corresponda con los metabolitos de data_values
-# 1. Crear un dataframe vacío aa_info_new con una columna extra "name.DataValues" y las columnas de aa_info
+Para poder guardar la información de aa_info en nuestro SummarizedExperiment, generamos un dataframe con la información de aa_info que corresponda con los metabolitos de data_values.
+```{r}
+# 1. Crear un dataframe vacío aa_info_new
 aa_info_new <- data.frame(matrix(ncol = ncol(aa_info) + 1, nrow = 0))
 # 2. Iterar por cada nombre de las columnas en data_values y añadir a aa_info_new la fila correspondiente de aa_info
 for (col_name in colnames(data_values)) {
@@ -54,7 +60,6 @@ for (col_name in colnames(data_values)) {
   }
 }
 colnames(aa_info_new) <- c("name.DataValues", colnames(aa_info))
-print(aa_info_new)
 
 #Comprobamos dimensiones:
 ncol(data_values)==nrow(data_info)
@@ -68,7 +73,7 @@ data_info_new <- cbind(data_info, aa_info_new[,-1])
 head(data_info_new)
 ```
 
-Creamos el objeto SummarizedExperiment
+Creamos el objeto SummarizedExperiment con los datos:
 ```{r}
 se <- SummarizedExperiment(
     assays = list(counts = data_values),
@@ -76,42 +81,50 @@ se <- SummarizedExperiment(
 )
 #Observamos un resumen del objeto SummarizedExperiment:
 se
+
+#Guardamos el objeto contenedor en formato binario (.Rda)
+save(se, file = "SummarizedExperiment.Rda")
+#Guardamos los datos en formato texto
+write.table(assay(se), file = "data/datos.txt", sep = "\t")
 ```
 
 ## Exploración del dataset
 
-Este conjunto de datos recopila información clínica y metabolómica de 39 pacientes en cinco momentos diferentes, antes y después de una cirugía bariátrica. Incluye datos demográficos y de salud, así como niveles de metabolitos específicos, con el objetivo de analizar cómo responde el metabolismo a la cirugía. A través de estos datos, el estudio original de donde se han obtenido busca identificar patrones metabólicos que expliquen las diferencias en la respuesta de los pacientes más allá de la pérdida de peso.
+Este conjunto de datos recopila información clínica y metabolómica de 39 pacientes en cuatro momentos diferentes. Incluye datos demográficos y de salud, así como niveles de metabolitos específicos.
 
 Comenzamos observando el número de variables y muestras:
 ```{r}
-#Número de muestras
+#Número de variables
 num_variables <- ncol(assay(se))
 cat("Número de variables (variables demográficas y metabolitos):", num_variables, "\n")
 
-#Número de variables
+#Número de muestras
 num_muestras <- nrow(assay(se))
 cat("Número de muestras:", num_muestras, "\n")
 ```
-Comprobamos si faltan valores (NA)
+Observamos que hay 695 variables (clínicas y metabolómicas), y 39 muestras (39 pacientes, como indica la descripción).
+
+Comprobamos si faltan valores (NA):
 ```{r}
 na <- colSums(is.na(assay(se)))
-cat("Datos faltantes por variable:\n")
-print(na[na>0])
-#Observamos que faltan bastantes valores en el dataset.
+cat("Datos faltantes:", count(na))
 ```
-Descripción estadística de las variables demográficas
+Observamos que faltan bastantes valores en el dataset, lo que puede ser problemático más adelante en el análisis de los datos.
+
+A continuación, realizamos una descripción estadística de las variables demográficas:
 ```{r}
-cat("Resumen cirugía:")
+#Resumen cirugía:
 print(table(data_values$SURGERY))
-cat("Resumen edad:\n")
+#Resumen edad:
 print(summary(data_values$AGE))
-cat("Resumen sexo:")
+#Resumen sexo:
 print(table(data_values$GENDER))
 ```
 
-Visualizamos la distribución de los metabolitos a través de un gráfico simple:
+
+A continuación, realizaremos un gráfico simple para visualizar la distribución de los metabolitos:
 ```{r}
-# Seleccionar solo los datos de metabolitos
+# Seleccionar sólo los datos de metabolitos
 metabolitos <- assay(se)[, !(colnames(assay(se)) %in% c("SUBJECTS", "SURGERY", "AGE", "GENDER", "Group"))]
 
 # Crear un boxplot para todos los metabolitos
@@ -119,7 +132,8 @@ boxplot(metabolitos, main = "Distribución de metabolitos",
         ylab = "Intensidad", las = 2, cex.axis = 0.5)
 ```
 
-```{r}
+Ya que no es posible visualizar todos los nombres de los metabolitos, probamos con una matriz de correlación:
+```{r ggcorrplot, fig.height=10, fig.width=10}
 #Calculamos la matriz de correlación entre las variables
 correlation_matrix <- cor(metabolitos, use = "pairwise.complete.obs")
 
