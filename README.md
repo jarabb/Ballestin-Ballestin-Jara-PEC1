@@ -7,7 +7,7 @@ Los datos originales fueron descargados del repositorio de github https://github
 
 ## Otros archivos incluidos en este repositorio
 - `SummarizedExperiment.Rda`: Objeto contenedor SummarizedExperiment con los datos y los metadatos en formato binario.
-- `Ballestin-Ballestin-Jara-PEC1.html`: Informe con la descripción del proceso de realización de esta PEC.
+- `Ballestin-Ballestin-Jara-PEC1.pdf`: Informe con la descripción del proceso de realización de esta PEC.
 - `Ballestin-Ballestin-Jara-PEC1.Rmd`: Eñl código en R incluído en el informe.
   
 ## Archivos en la carpeta "data"
