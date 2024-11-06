@@ -17,6 +17,6 @@ Los datos originales fueron descargados del repositorio de github https://github
 - `datos.txt`: Los datos de `DataValues_S013.csv` en formato texto.
 
 ## Variables
-Número total de variables en los datos: 695
-Datos demográficos/clínicos: 5 variables (SUBJECTS, SURGERY, AGE, GENDER, Group)
-Datos medidos en diferentes momentos: 690 variables
+- Número total de variables en los datos: 695
+- Datos demográficos/clínicos: 5 variables (SUBJECTS, SURGERY, AGE, GENDER, Group)
+- Datos medidos en diferentes momentos: 690 variables
